@@ -19,7 +19,7 @@ module.exports = {
         }
       })
     } else {
-      return helper.response(res, 403, 'Please login as Admin !')
+      return helper.response(res, 403, 'Please login !')
     }
   }
 }
