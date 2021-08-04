@@ -21,7 +21,8 @@ app.use(compression())
 app.use(bodyParser.urlencoded({ extended: false }))
 // parse application/json
 app.use(bodyParser.json())
-app.use('/backend-voffice/api', routerNavigation)
+app.use('/backend-creative/api', routerNavigation)
+app.use('/backend-creative', express.static('src/uploads'))
 
 app.listen(port, () => {
   console.log(`Express app is listen on port ${port} !`)

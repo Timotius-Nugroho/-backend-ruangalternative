@@ -2,17 +2,22 @@ const express = require('express')
 const Route = express.Router()
 const {
   login,
-  bookingRoom,
-  clientInfo,
-  bookingHistory,
-  allRoom
+  register,
+  addArticle,
+  getAllArticle,
+  getArticleById,
+  addComment,
+  getAllComments
 } = require('./controller')
 const { authentication } = require('../middleware/auth')
+const uploadFile = require('../middleware/uploads')
 
 Route.post('/login', login)
-Route.post('/booking', authentication, bookingRoom)
-Route.post('/info', authentication, clientInfo)
-Route.get('/history/:email', authentication, bookingHistory)
-Route.get('/room', authentication, allRoom)
+Route.post('/register', register)
+Route.post('/add-article', authentication, uploadFile, addArticle)
+Route.get('/get-all-article', getAllArticle)
+Route.get('/get-article/:id', getArticleById)
+Route.post('/add-comment', authentication, addComment)
+Route.get('/get-comment', getAllComments)
 
 module.exports = Route

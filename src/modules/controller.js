@@ -1,31 +1,46 @@
 const helper = require('../helpers/wrapper')
 const {
-  checkClientByCondition,
-  getClientByCondition,
-  updateClientBalance,
-  addBookingOrder,
-  getBookingHistory,
-  getAllRoom,
-  getFacilitiesByRoomId
+  getUserByCondition,
+  addUser,
+  addArticle,
+  getArticleCount,
+  getAllArticle,
+  getArticleById,
+  addComment,
+  getAllComments
 } = require('./model')
 const jwt = require('jsonwebtoken')
+const bcrypt = require('bcrypt')
 require('dotenv').config()
 
 module.exports = {
   login: async (req, res) => {
     try {
-      const dataLogin = req.body
-      const isClientExsist = await checkClientByCondition(dataLogin)
-      if (!isClientExsist) {
+      const isUserExsist = await getUserByCondition({
+        user_email: req.body.user_email
+      })
+      if (isUserExsist.length === 0) {
         return helper.response(res, 404, 'Client not found')
       }
-      const token = jwt.sign({ ...dataLogin }, process.env.PRIVATE_KEY, {
-        expiresIn: '24h'
-      })
+
+      const checkPassword = bcrypt.compareSync(
+        req.body.user_password,
+        isUserExsist[0].user_password
+      )
+      if (!checkPassword) {
+        return helper.response(res, 400, 'Worng password')
+      }
+
+      const token = jwt.sign(
+        { id: isUserExsist[0].user_id },
+        process.env.PRIVATE_KEY,
+        {
+          expiresIn: '24h'
+        }
+      )
 
       return helper.response(res, 200, 'Succes Login', {
-        token: token,
-        cilentEmail: dataLogin.client_email
+        token: token
       })
     } catch (error) {
       console.log(error)
@@ -33,74 +48,142 @@ module.exports = {
     }
   },
 
-  clientInfo: async (req, res) => {
+  register: async (req, res) => {
     try {
-      const client = await getClientByCondition({
-        client_email: req.body.client_email
+      // console.log(req.body)
+      const isUserExsist = await getUserByCondition({
+        user_email: req.body.user_email
       })
 
-      if (client.length === 0) {
-        return helper.response(res, 404, 'Client not found')
+      if (isUserExsist.length > 0) {
+        return helper.response(res, 400, 'Email has been registered')
       }
 
-      return helper.response(res, 200, 'Succes Login', client)
+      const salt = bcrypt.genSaltSync(10)
+      const encryptPassword = bcrypt.hashSync(req.body.user_password, salt)
+
+      const setData = {
+        user_name: req.body.user_name,
+        user_email: req.body.user_email,
+        user_password: encryptPassword
+      }
+      const result = await addUser(setData)
+      delete result.user_password
+      return helper.response(res, 200, 'Success make new account', result)
     } catch (error) {
       console.log(error)
       return helper.response(res, 400, 'Bad Request', error)
     }
   },
 
-  bookingRoom: async (req, res) => {
+  addArticle: async (req, res) => {
     try {
-      const dataBooking = req.body
-      const client = await getClientByCondition({
-        client_id: dataBooking.client_id
+      // console.log(req.body)
+      const result = await addArticle({
+        articles_banner: req.file ? req.file.filename : '',
+        ...req.body
       })
-
-      if (client.length === 0) {
-        return helper.response(res, 404, 'Client not found')
-      }
-      if (
-        parseInt(client[0].client_balance) < parseInt(dataBooking.booking_time)
-      ) {
-        return helper.response(res, 400, 'Not enough balance')
-      }
-
-      const newBalance =
-        parseInt(client[0].client_balance) - parseInt(dataBooking.booking_time)
-      const result = await addBookingOrder(dataBooking)
-      await updateClientBalance(client[0].client_id, {
-        client_balance: newBalance
-      })
-      return helper.response(res, 200, 'Succes booking room', result)
+      return helper.response(res, 200, 'Sucess add an article', result)
     } catch (error) {
       console.log(error)
       return helper.response(res, 400, 'Bad Request', error)
     }
   },
 
-  bookingHistory: async (req, res) => {
+  getAllArticle: async (req, res) => {
     try {
-      const client = await getClientByCondition({
-        client_email: req.params.email
-      })
+      // console.log(req.query)
+      let { page, limit, sort, keywords, category } = req.query
 
-      const result = await getBookingHistory(client[0].client_id)
-      return helper.response(res, 200, 'Succes get booking history', result)
+      limit = limit || '6'
+      page = page || '1'
+      keywords = keywords ? '%' + keywords + '%' : '%'
+      category = category
+        ? 'AND articles_topic LIKE "' + '%' + category + '%"'
+        : ''
+      sort = sort || 'articles_created_at DESC'
+
+      page = parseInt(page)
+      limit = parseInt(limit)
+      const offset = page * limit - limit
+
+      const totalData = await getArticleCount(keywords, category)
+      console.log('Total Data ' + totalData)
+      const totalPage = Math.ceil(totalData / limit)
+      console.log('Total Page ' + totalPage)
+
+      const pageInfo = {
+        page,
+        totalPage,
+        limit,
+        totalData
+      }
+      const result = await getAllArticle(
+        keywords,
+        category,
+        sort,
+        limit,
+        offset
+      )
+
+      return helper.response(
+        res,
+        200,
+        'Sucess get all article',
+        result,
+        pageInfo
+      )
     } catch (error) {
       console.log(error)
       return helper.response(res, 400, 'Bad Request', error)
     }
   },
 
-  allRoom: async (req, res) => {
+  getArticleById: async (req, res) => {
     try {
-      const result = await getAllRoom()
-
-      for (const room of result) {
-        room.facilities = await getFacilitiesByRoomId(room.room_id)
+      const { id } = req.params
+      const result = await getArticleById(id)
+      if (result.length === 0) {
+        return helper.response(res, 404, 'Not found')
       }
-      return helper.response(res, 200, 'Succes all meeting room', result)
+
+      const authorInfo = await getUserByCondition({
+        user_id: result[0].user_id
+      })
+      delete result[0].user_id
+      result[0].author_name = authorInfo[0].user_name
+
+      return helper.response(res, 200, 'Sucess get an article', result)
+    } catch (error) {
+      console.log(error)
+      return helper.response(res, 400, 'Bad Request', error)
+    }
+  },
+
+  addComment: async (req, res) => {
+    try {
+      const setData = { user_id: req.decodeToken.id, ...req.body }
+      const result = await addComment(setData)
+      return helper.response(res, 200, 'Sucess add comment', result)
+    } catch (error) {
+      console.log(error)
+      return helper.response(res, 400, 'Bad Request', error)
+    }
+  },
+
+  getAllComments: async (req, res) => {
+    try {
+      const { articleId } = req.query
+      const result = await getAllComments(articleId)
+
+      for (const comment of result) {
+        const commentatorInfo = await getUserByCondition({
+          user_id: comment.user_id
+        })
+        delete comment.user_id
+        comment.commentator = commentatorInfo[0].user_name
+      }
+      return helper.response(res, 200, 'Sucess get all comment', result)
     } catch (error) {
       console.log(error)
       return helper.response(res, 400, 'Bad Request', error)

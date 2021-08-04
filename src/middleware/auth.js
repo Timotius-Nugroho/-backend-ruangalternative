@@ -15,6 +15,7 @@ module.exports = {
         ) {
           return helper.response(res, 403, error.message)
         } else {
+          req.decodeToken = result
           next()
         }
       })
